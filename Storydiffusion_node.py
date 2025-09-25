@@ -34,10 +34,10 @@ MAX_SEED = np.iinfo(np.int32).max
 dir_path = os.path.dirname(os.path.abspath(__file__))
 
 
-weigths_gguf_current_path = os.path.join(folder_paths.models_dir, "gguf")
-if not os.path.exists(weigths_gguf_current_path):
-    os.makedirs(weigths_gguf_current_path)
-folder_paths.add_model_folder_path("gguf", weigths_gguf_current_path) # use gguf dir
+weights_gguf_current_path = os.path.join(folder_paths.models_dir, "gguf")
+if not os.path.exists(weights_gguf_current_path):
+    os.makedirs(weights_gguf_current_path)
+folder_paths.add_model_folder_path("gguf", weights_gguf_current_path) # use gguf dir
 
 global total_count, attn_count_, cur_step, mask1024, mask4096, attn_procs_, unet_,sa32, sa64,write,height_s, width_s
 
@@ -75,7 +75,7 @@ class EasyFunction_Lite:
         repo1_path=PureWindowsPath(repo1).as_posix() if repo1 else None
         repo2_path=PureWindowsPath(repo2).as_posix() if repo2 else None
         gguf_path=folder_paths.get_full_path("gguf", gguf) if gguf != "none" else None
-        unet_path=folder_paths.get_full_path("unet", unet) if unet != "none" else None
+        unet_path=folder_paths.get_full_path("diffusion_models", unet) if unet != "none" else None
         clip1_path=folder_paths.get_full_path("clip", clip1) if clip1 != "none" else None
         clip2_path=folder_paths.get_full_path("clip", clip2) if clip2 != "none" else None
         lora1_path  =folder_paths.get_full_path("loras", lora1) if lora1 != "none" else None
@@ -216,13 +216,18 @@ class StoryDiffusion_Apply:
 
         
         if infer_mode in ["story_maker" ,"story_and_maker"] and ipadapter_ckpt_path is None:
-             raise "story_maker need a mask.bin"
+             raise ValueError("story_maker need a mask.bin")
 
         # check vram only using in flux pulid or UNO
-        if total_vram > 45000.0:
+        try:
+            vram_total = float(total_vram)
+        except Exception:
+            import comfy.model_management as model_management
+            vram_total = float(model_management.get_total_vram())
+        if vram_total > 45000.0:
             aggressive_offload = False
             offload = False
-        elif 17000.0 < total_vram < 45000.0:
+        elif 17000.0 < vram_total < 45000.0:
             aggressive_offload = False
             offload = True
         else:
@@ -241,7 +246,7 @@ class StoryDiffusion_Apply:
             from .PuLID.app_flux import get_models
             from .model_loader_utils import Loader_Flux_Pulid
             if unet_path is None:
-                raise "PuLID can't link a normal comfyui model,you need load a flux unet model "
+                raise ValueError("PuLID can't link a normal comfyui model,you need load a flux unet model")
             model_=get_models("flux-dev",unet_path,False,aggressive_offload,device=device,offload=offload,quantized_mode=quantize_mode,)
             model = Loader_Flux_Pulid(model_,model,ipadapter_ckpt_path,quantize_mode,aggressive_offload,offload,False,clip_vision_path)
         elif infer_mode == "infiniteyou":
@@ -258,7 +263,7 @@ class StoryDiffusion_Apply:
         elif infer_mode == "realcustom":
             from .model_loader_utils import load_pipeline_realcustom,load_realcustom_vae
             if ipadapter_ckpt_path is None:
-                raise "realcustom need a realcustom model which in photomaker folder, and  chocie it in ipadapter_ckpt_path"
+                raise ValueError("realcustom need a realcustom model which in photomaker folder, and  chocie it in ipadapter_ckpt_path")
             model,vision_model_config_ar,_ = load_pipeline_realcustom(model,ipadapter_ckpt_path)
             vae_encoder,vae_downsample_factor,vae_config=load_realcustom_vae(vae,device)
         elif infer_mode == "kolor_face":
@@ -274,13 +279,13 @@ class StoryDiffusion_Apply:
         elif infer_mode == "dreamo":
             from.model_loader_utils import Loader_Dreamo
             if dreamo_lora_path is None or cfg_distill_path is None or ipadapter_ckpt_path is None:
-                raise "dreamo need a dreamo lora and cfg distill and turbo lora in ipadapter menu"
+                raise ValueError("dreamo need a dreamo lora and cfg distill and turbo lora in ipadapter menu")
             model = Loader_Dreamo(extra_info,vae,quantize_mode,dreamo_lora_path,cfg_distill_path,ipadapter_ckpt_path,device,dreamo_version)
         elif infer_mode == "bagel_edit":
             from .Bagel.app import load_bagel_model
           
             if not repo_list :
-                raise "EasyFunction_Lite node repo1 or repo2 must fill bagel repo"
+                raise ValueError("EasyFunction_Lite node repo1 or repo2 must fill bagel repo")
             max_mem_per_gpu=str(int(total_vram/1000))+"GIB"
             model = load_bagel_model(repo_list[0],quantize_mode,max_mem_per_gpu)
         elif infer_mode == "flux_omi":
@@ -385,7 +390,8 @@ class StoryDiffusion_CLIPTextEncode:
 
         if (siglip_path_ is not None and dino_path_ is not None and 
             "sig" in dino_path_ and "dino" in siglip_path_):
-            siglip_path, dino_path = dino_path_, siglip_path_i
+            # se vierem invertidos, corrige a ordem
+            siglip_path, dino_path = dino_path_, siglip_path_
             
 
         if infer_mode == "realcustom" and (siglip_path is None or dino_path is None):
@@ -441,19 +447,19 @@ class StoryDiffusion_CLIPTextEncode:
 
 
         if not img2img_mode and infer_mode=="flux_pulid":
-            raise "flux_pulid mode only support image2image"
+            raise ValueError("flux_pulid mode only support image2image")
 
         if infer_mode=="msdiffusion" and not prompts_dual:
-            raise "use msdiffusion mode need  have [role1] and [role2] in sence txt."
+            raise ValueError("use msdiffusion mode need  have [role1] and [role2] in sence txt.")
         
         if img2img_mode and   photomake_ckpt_path is None and infer_mode=="story":
-            raise "need chocie photomake v1 or v2 when use img2img mode"
+            raise ValueError("need chocie photomake v1 or v2 when use img2img mode")
   
         if infer_mode=="story_maker"  and image is None:
-            raise "story_maker only support  img2img mode,you can use story_and_maker or link a iamge"
+            raise ValueError("story_maker only support  img2img mode,you can use story_and_maker or link a image")
 
         if infer_mode=="msdiffusion" and photomake_ckpt_path  and  not img2img_mode:
-            raise "if use msdiffusion txt2img mode,can not use photomake_ckpt_path"
+            raise ValueError("if use msdiffusion txt2img mode,can not use photomake_ckpt_path")
 
         uno_pe="d" #Literal['d', 'h', 'w', 'o']
         
@@ -531,7 +537,7 @@ class StoryDiffusion_CLIPTextEncode:
                 if control_image is not None and dreamo_mode=="id":#如果是id加ip模式，角色可以多次换装，但是要考虑衣服的数量
                     control_pil_list=tensortopil_list_upscale(control_image,width,height)
                     if len(control_pil_list) != len(only_role_list):
-                        raise "when use dreamo id + ip,control image must same size as prompts,dreamo的id模式,多少句角色prompt,就要有多少件衣服在control节点输入"
+                        raise ValueError("when use dreamo id + ip,control image must same size as prompts,dreamo的id模式,多少句角色prompt,就要有多少件衣服在control节点输入")
                     else:
                         if len(role_list)>1:
                                 nc_dual_list=[]
@@ -595,7 +601,7 @@ class StoryDiffusion_CLIPTextEncode:
                         x_1_refs_dict[key]=[[vae.encode(role_tensor[:,:,:,:3]).to(torch.bfloat16)]*len(prompts)] # {key:[[1],[2],key2:[[3],[4]]}
                 else:
                     if len(control_pil_list) != len(only_role_list):
-                        raise "control image must same size as prompts,多少句话就多少张图"
+                        raise ValueError("control image must same size as prompts,多少句话就多少张图")
                     else:
                         if len(role_list)>1:
                             nc_dual_list=[]
@@ -678,7 +684,7 @@ class StoryDiffusion_CLIPTextEncode:
                     object_prompt=[i.strip() for i in object_prompt]
                     for i in object_prompt:
                         if " " in i:
-                            raise "when using [object],object must be a word,any blank in it will cause error."
+                            raise ValueError("when using [object],object must be a word,any blank in it will cause error.")
                         
                     object_prompt=[i for i in object_prompt ]
                     target_phrases = sorted(list(set(object_prompt)),key=lambda x: list(object_prompt).index(x))  # 清除同名物体,保持原有顺序
@@ -687,7 +693,7 @@ class StoryDiffusion_CLIPTextEncode:
                     if len(target_phrases)>2:
                         target_phrases=target_phrases[:2] #只取前两个物体
             else:
-                raise "when using realcustom ,(objectA)  and (objectA) must be in the role prompt."
+                raise ValueError("when using realcustom ,(objectA)  and (objectA) must be in the role prompt.")
             
             print(f"object_prompt:{target_phrases}")
             image_list=tensortopil_list_upscale(image, width, height)
@@ -832,7 +838,7 @@ class StoryDiffusion_CLIPTextEncode:
                     object_prompt=[i.strip() for i in object_prompt]
                     for i in object_prompt:
                         if " " in i:
-                            raise "when using [object],object must be a word,any blank in it will cause error."
+                            raise ValueError("when using [object],object must be a word,any blank in it will cause error.")
                         
                     object_prompt=[i for i in object_prompt ]
                     phrases = sorted(list(set(object_prompt)),key=lambda x: list(object_prompt).index(x))  # 清除同名物体,保持原有顺序
@@ -841,7 +847,7 @@ class StoryDiffusion_CLIPTextEncode:
                     if len(phrases)>2:
                         phrases=phrases[:2] #只取前两个物体
                 else:
-                    raise "when using msdiffusion ,(objectA)  and (objectA) must be in the prompt."
+                    raise ValueError("when using msdiffusion ,(objectA)  and (objectA) must be in the prompt.")
                 if use_lora:
                     prompts_dual=[i+lora_trigger_words for i in prompts_dual]
                 
@@ -865,11 +871,27 @@ class StoryDiffusion_CLIPTextEncode:
                 from transformers import CLIPTokenizer
                 tokenizer_=CLIPTokenizer.from_pretrained(os.path.join(dir_path, "local_repo/tokenizer"))
                 for i in prompts_dual:
-                    phrase_idxes = [get_phrases_idx_cf(tokenizer_, phrases[0], i)]
-                    eot_idxes = [[get_eot_idx_cf(tokenizer_, i)] * len(phrases[0])]
-                    cross_attention_kwargs, grounding_kwargs = get_ms_phrase_emb(boxes, device, infer_type_g,
-                                                                             [0], 1, phrase_idxes,
-                                                                             1, eot_idxes, phrases, clip,tokenizer_)
+                    # frases extraídas dos parênteses: ex. ["ravi","serena"]
+                    num_phrases = len(phrases)            # deve ser 2
+                    # índices de CADA âncora no prompt
+                    phrase_idxes = [get_phrases_idx_cf(tokenizer_, p, i) for p in phrases]
+                    # um EOT por âncora (não por caractere)
+                    eot_idxes = [[get_eot_idx_cf(tokenizer_, i)] for _ in range(num_phrases)]
+
+                    cross_attention_kwargs, grounding_kwargs = get_ms_phrase_emb(
+                        boxes,                    # [[boxA, boxB]]
+                        device,
+                        infer_type_g,
+                        [0],                      # batch idx
+                        1,                        # batch size
+                        phrase_idxes,             # índices para TODAS as âncoras
+                        num_phrases,              # <-- era 1, deve ser 2
+                        eot_idxes,
+                        phrases,                  # ["ravi","serena"]
+                        clip,
+                        tokenizer_
+                    )
+
                 daul_emb = cf_clip(prompts_dual, clip, infer_mode,role_list,input_split=False)
             else:
                 prompts_dual=[i.replace(role_list[0] ,role_dict[role_list[0]]) for i in prompts_dual if role_list[0] in i ]
@@ -1194,7 +1216,7 @@ class StoryDiffusion_KSampler:
         if  infer_mode =="classic":
             samples_list=[]
             for i in positive:
-                seed_random=random.randint(0, seed)
+                seed_random=seed
                 samples=self.common_ksampler(model, seed_random, steps, cfg, sampler_name, scheduler, i, negative, latent_image,
                                 denoise=denoise)  #torch.Size([1, 4, 64, 64])
                
@@ -1228,18 +1250,21 @@ class StoryDiffusion_KSampler:
                     else:
                         model=load_lora_for_unet_only(model,lora_list[0],trigger_words,lora_scale)
 
-                if condition.get("controlnet_path")  is not None and infer_mode!="story":
-                    controlnet_path =condition.get("controlnet") 
+                controlnet_model = None
+                if condition.get("controlnet_path") is not None and infer_mode != "story":
+                    controlnet_path = condition.get("controlnet_path")
                     from diffusers import ControlNetModel
                     from safetensors.torch import load_file
-                    controlnet = ControlNetModel.from_unet(model.unet)
+
+                    controlnet_model = ControlNetModel.from_unet(model.unet)
                     cn_state_dict = load_file(controlnet_path, device="cpu")
-                    controlnet.load_state_dict(cn_state_dict, strict=False)
+                    controlnet_model.load_state_dict(cn_state_dict, strict=False)
                     del cn_state_dict
                     gc_cleanup()
-                    controlnet.to(torch.float16)
-                    if infer_mode=="story_maker" :
-                        model.controlnet = controlnet
+                    controlnet_model.to(torch.float16)
+
+                    if infer_mode == "story_maker":
+                        model.controlnet = controlnet_model
 
 
 
@@ -1251,7 +1276,7 @@ class StoryDiffusion_KSampler:
             
             if infer_mode in["story" ,"msdiffusion","story_and_maker"]: #三者都调用story的unet方法，只是双角色引入ms或者maker
                 if ipadapter_ckpt_path is None and infer_mode=="msdiffusion":
-                    raise "msdiffusion  need a ms_adapter.bin file at ipadapter_ckpt menu."
+                    raise ValueError("msdiffusion  need a ms_adapter.bin file at ipadapter_ckpt menu.")
                 global attn_procs_,sa32, sa64, write, height_s, width_s,attn_count_, total_count, id_length, total_length, cur_step,cur_character
 
                 sa32 = sa32_degree
@@ -1313,7 +1338,7 @@ class StoryDiffusion_KSampler:
                             samples_list.insert(int(index_), sample_nc)
                 else:
                     for key in role_list: # i:{a:[[tensor,tensor],[tensor,tensor]],b:[[tensor,tensor],[tensor,tensor]]} 只跑第一张图生成ID
-                        seed_random = random.randint(0, seed)
+                        seed_random = seed
                         write = True
                         cur_character = [key]
                         samples = model(height=height, width=width, num_inference_steps=steps, guidance_scale=cfg,
@@ -1341,7 +1366,7 @@ class StoryDiffusion_KSampler:
                                 
                     if nc_emb: #no role 无角色的emb
                         for index, i in zip(nc_index, nc_emb):
-                            seed_random = random.randint(0, seed)
+                            seed_random = seed
                             write = False
                             samples = model(height=height, width=width, num_inference_steps=steps, guidance_scale=cfg,
                                             generator=torch.Generator(device=device).manual_seed(seed_random),
@@ -1360,7 +1385,7 @@ class StoryDiffusion_KSampler:
                        
                         VAE=condition.get("VAE")
                         for j ,(index, i) in enumerate(zip(dual_index, daul_emb_ms)):
-                            seed_random = random.randint(0, seed)
+                            seed_random = seed
                             write = False
                             if not img2img_mode: #文生图模式，以文生图第一张为ID参考拿emb
                                 CLIP_VISION = condition.get("CLIP_VISION")
@@ -1376,7 +1401,7 @@ class StoryDiffusion_KSampler:
                                     role_tensor=torch.cat((role_1,role_2),dim=0)
                                     image_embeds=CLIP_VISION.encode_image(role_tensor)["penultimate_hidden_states"]
                                     image_embeds = image_embeds.to(device, dtype=model.unet.dtype)
-                                    if controlnet:
+                                    if controlnet_model is not None:
                                         model=model #TO DO
                                     #write = False
                                     samples = Infer_MSdiffusion(model,ipadapter_ckpt_path,image_embeds, i[0],negative[0],grounding_kwargs,cross_attention_kwargs,
@@ -1433,10 +1458,10 @@ class StoryDiffusion_KSampler:
                                     print("reload maker") 
                                     model=Loader_story_maker(None,ipadapter_ckpt_path,VAE,False,condition.get("lora_scale"),UNET=model)
                                     gc_cleanup()
-                                    if controlnet:
+                                    if controlnet_model is not None:
                                         model.controlnet = controlnet
                                         
-                                    seed_random = random.randint(0, seed)
+                                    seed_random = seed
                                    
                                     #print(i)
                                     samples = model(height=height, width=width, num_inference_steps=steps, guidance_scale=cfg,
@@ -1452,7 +1477,7 @@ class StoryDiffusion_KSampler:
             
                 if daul_emb: #双角色的emb，即便不是msdiffusion，其他方法也能用，只是ID不一致而已
                     for index, i in zip(dual_index, daul_emb):
-                        seed_random = random.randint(0, seed)
+                        seed_random = seed
                         write = False
                         samples = model(height=height, width=width, num_inference_steps=steps, guidance_scale=cfg,
                             generator=torch.Generator(device=device).manual_seed(seed_random),
@@ -1467,7 +1492,7 @@ class StoryDiffusion_KSampler:
                 return (out,)
             elif infer_mode == "story_maker" : #单纯使用maker，兼容单体双人及双人同框，目前需要修改源码，将cn的图片与衣服的emb拿出来提前处理，再传入pipe
                 model.scheduler = scheduler_choice.from_config(model.scheduler.config)
-                seed_random = random.randint(0, seed)
+                seed_random = seed
                 samples_list = []
                 for key in role_list :
                     for i,emb in enumerate(only_role_emb[key]): 
@@ -1484,7 +1509,7 @@ class StoryDiffusion_KSampler:
                 if nc_emb: #no role 无角色的emb
                     id_embeds_z, clip_image_embeds_z, clip_face_embeds_z = torch.zeros_like(prompt_image_emb[0]), torch.zeros_like(prompt_image_emb[1]), torch.zeros_like(prompt_image_emb[2])
                     for index, i in zip(nc_index, nc_emb):
-                        seed_random = random.randint(0, seed)
+                        seed_random = seed
                         write = False
                         samples = model(height=height, width=width, num_inference_steps=steps, guidance_scale=cfg,
                             generator=torch.Generator(device=device).manual_seed(seed_random),
@@ -1498,7 +1523,7 @@ class StoryDiffusion_KSampler:
                         samples_list.insert(index, samples)
                 if daul_emb:
                     for j ,(index, i) in enumerate(zip(dual_index, daul_emb)):
-                        seed_random = random.randint(0, seed)
+                        seed_random = seed
                         write = False
                         samples = model(height=height, width=width, num_inference_steps=steps, guidance_scale=cfg,
                             generator=torch.Generator(device=device).manual_seed(seed_random),
@@ -1532,7 +1557,7 @@ class StoryDiffusion_KSampler:
                 torch.cuda.reset_max_memory_allocated(gpu)
                 
                 model.scheduler = scheduler_choice.from_config(model.scheduler.config)
-                seed_random = random.randint(0, seed)
+                seed_random = seed
                 if not cached:
                     if not inject:
                         model.enable_vae_slicing()
@@ -1543,7 +1568,7 @@ class StoryDiffusion_KSampler:
                                                          same_latent=same_latent, perform_injection=inject,n_achors=n_achors,cf_clip=condition.get("cf_clip"))
                     out = {}
                     out["samples"] = samples_list
-                    return (out,zero_tensor)
+                    return (out,)
                 else:  
                     samples_list = []
                     if len(replace_prompts)>2:
@@ -1636,7 +1661,7 @@ class StoryDiffusion_KSampler:
                             control_image=cn_img[index] if isinstance(cn_img , list) else input_id_img_s_dict[key][0],
                             guidance_scale=cfg,
                             num_steps=steps,
-                            seed=random.randint(0, seed),
+                            seed=seed,
                             infusenet_conditioning_scale=1.0,
                             infusenet_guidance_start=0,
                             infusenet_guidance_end=1.0,
@@ -1657,7 +1682,7 @@ class StoryDiffusion_KSampler:
                             num_steps=steps,
                             start_step=2,
                             guidance=cfg,
-                            seed=random.randint(0, seed),
+                            seed=seed,
                             inp=emb,
                             inp_neg=negative[0][key][index],
                             id_embeddings=input_id_emb_s_dict[key][0],
@@ -1679,7 +1704,7 @@ class StoryDiffusion_KSampler:
                             guidance=cfg,
                             num_steps=steps,
                             inp_cond=emb,
-                            seed=random.randint(0, seed),
+                            seed=seed,
                             
                             )  # torch.Size([1, 4, 64, 64])
                     
@@ -1693,7 +1718,7 @@ class StoryDiffusion_KSampler:
                             guidance=cfg,
                             num_steps=steps,
                             inp_cond=emb,
-                            seed=random.randint(0, seed) 
+                            seed=seed 
                             )  # torch.Size([1, 4, 64, 64])
                         samples_list.insert(index, samples)
 
@@ -1717,7 +1742,7 @@ class StoryDiffusion_KSampler:
                             guidance_weight=cfg,
                             height=height,
                             width=width,
-                            seed=random.randint(0, seed),
+                            seed=seed,
                             device=device,
                             )
                         samples_list.append(samples)
@@ -1736,7 +1761,7 @@ class StoryDiffusion_KSampler:
                             guidance_scale=cfg,
                             subject_image=True,
                             subject_scale=0.9,
-                            generator=torch.manual_seed(random.randint(0, seed)),
+                            generator=torch.manual_seed(seed),
                             text_ids=emb_list[2],
                             subject_image_embeds_dict=id_emb,
                             )[0]  # torch.Size([1, 4, 64, 64])
@@ -1983,7 +2008,7 @@ class Pre_Translate_prompt:
                              }}
 
     RETURN_TYPES = ("STRING",)
-    ETURN_NAMES = ("prompt_array",)
+    RETURN_NAMES = ("prompt_array",)
     FUNCTION = "translate_prompt"
     CATEGORY = "Storydiffusion"
 
@@ -2315,21 +2340,21 @@ class SpatialAttnProcessor2_0(torch.nn.Module):
 
 
 NODE_CLASS_MAPPINGS = {
-    "Pre_Translate_prompt": Pre_Translate_prompt,
-    "Comic_Type": Comic_Type,
-    "EasyFunction_Lite":EasyFunction_Lite,
-    "StoryDiffusion_Apply":StoryDiffusion_Apply,
-    "StoryDiffusion_CLIPTextEncode":StoryDiffusion_CLIPTextEncode,
-    "StoryDiffusion_KSampler":StoryDiffusion_KSampler,
+    "Pre_Translate_prompt_DW": Pre_Translate_prompt,
+    "Comic_Type_DW": Comic_Type,
+    "EasyFunction_Lite_DW":EasyFunction_Lite,
+    "StoryDiffusion_Apply_DW":StoryDiffusion_Apply,
+    "StoryDiffusion_CLIPTextEncode_DW":StoryDiffusion_CLIPTextEncode,
+    "StoryDiffusion_KSampler_DW":StoryDiffusion_KSampler,
 
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "Pre_Translate_prompt": "Pre_Translate_prompt",
-    "Comic_Type": "Comic_Type",
-    "EasyFunction_Lite":"EasyFunction_Lite",
-    "StoryDiffusion_Apply":"StoryDiffusion_Apply",
-    "StoryDiffusion_CLIPTextEncode":"StoryDiffusion_CLIPTextEncode",
-    "StoryDiffusion_KSampler":"StoryDiffusion_KSampler",
+    "Pre_Translate_prompt_DW": "Pre_Translate_prompt (DW)",
+    "Comic_Type_DW": "Comic_Type (DW)",
+    "EasyFunction_Lite_DW":"EasyFunction_Lite (DW)",
+    "StoryDiffusion_Apply_DW":"StoryDiffusion_Apply (DW)",
+    "StoryDiffusion_CLIPTextEncode_DW":"StoryDiffusion_CLIPTextEncode (DW)",
+    "StoryDiffusion_KSampler_DW":"StoryDiffusion_KSampler (DW)",
 }
 
